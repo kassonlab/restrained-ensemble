@@ -18,11 +18,19 @@ void parse_ini(const char *ini_filename,
 
 void read_exp_json(std::string exp_filename, std::vector<pair_data> &pd);
 
+simdata read_sim_xvgs(vecofstrings filenames, unsigned long num_pairs, bool skip_time);
+
 void mpi_read_xvgs(boost::mpi::communicator &world,
                    setofpairs &vec_pd,
                    vecofstrings filenames,
                    unsigned long num_pairs,
                    bool skip_time);
+
+void mpi_read_xvgs(boost::mpi::communicator &world,
+                   std::vector<summary_data> &vec_sd,
+                   vecofstrings dist_filenames,
+                   vecofstrings forc_filenames,
+                   unsigned long num_pairs);
 
 vecofstrings make_dat(const char *dat_filename,
                       std::vector<pair_data> vec_pd,
@@ -38,4 +46,5 @@ void make_mdp(std::vector<pair_data> vec_pd,
               parameters params,
               vecofstrings pull_coord);
 
+void read_histograms(std::string dif_filename, std::vector<summary_data>& vec_sd);
 #endif //ROUX_ROUXFILEIO_H

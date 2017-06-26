@@ -31,6 +31,30 @@ void serialize(Archive &ar, pair_data &pd, const unsigned int version) {
     ar & pd.sim_time_data;
 }
 
+struct summary_data{
+    double              k;
+    std::string         summary_filename;
+    std::pair<int, int> residue_ids;
+    std::vector<float> exp_distribution;
+    std::vector<float> sim_dist_data;
+    std::vector<float> sim_time_data;
+    std::vector<float> sim_forc_data;
+    std::vector<float> calc_forc_data;
+    std::vector<float> hist_difference;
+};
+
+template<class Archive>
+void serialize(Archive &ar, summary_data &sd, const unsigned int version) {
+    ar & sd.k;
+    ar & sd.summary_filename;
+    ar & sd.residue_ids;
+    ar & sd.sim_dist_data;
+    ar & sd.sim_time_data;
+    ar & sd.sim_forc_data;
+    ar & sd.calc_forc_data;
+    ar & sd.hist_difference;
+}
+
 struct gromacs_files {
     std::string xtc;
     std::string tpr;

@@ -190,6 +190,41 @@ void vec2pd(simdata &sim_data, std::vector<pair_data> &vec_pd, bool skip_time) {
             sim_pd = &sim_data[i + 1];
         }
         pd->sim_dist_data.insert(pd->sim_dist_data.end(), sim_pd->begin(), sim_pd->end());
+
+    }
+
+}
+
+void vec2sd(simdata &sim_data, std::vector<summary_data> &vec_sd, bool skip_time, bool forces) {
+    // Do a bit of checking first
+    auto sim_len = sim_data.size();
+    auto num_pairs = vec_sd.size();
+    if (!skip_time) --sim_len;
+
+    if (sim_len != num_pairs) {
+        char error_message[BUFFER_LENGTH];
+        snprintf(error_message, BUFFER_LENGTH,
+                 "The number of pairs (%lu) in the vector of pair data does not match the number of "
+                         "pairs (%lu) in the simulation xvgs", num_pairs, sim_len);
+        throw std::invalid_argument(error_message);
+    }
+
+    // Now start storing data
+    for (int i = 0; i < num_pairs; ++i) {
+        auto pd = &vec_sd[i];
+        std::vector<float> *sim_sd;
+
+        if (skip_time) sim_sd = &sim_data[i];
+        else {
+            pd->sim_time_data.insert(pd->sim_time_data.end(),
+                                     sim_data[0].begin(),
+                                     sim_data[0].end());
+            sim_sd = &sim_data[i + 1];
+        }
+        if (forces) {
+            pd->sim_forc_data.insert(pd->sim_forc_data.end(), sim_sd->begin(), sim_sd->end());
+        } else
+            pd->sim_dist_data.insert(pd->sim_dist_data.end(), sim_sd->begin(), sim_sd->end());
     }
 
 }
@@ -219,6 +254,51 @@ void mpi_read_xvgs(boost::mpi::communicator &world,
         }
     }
     mpi::broadcast(world, vec_pd, 0);
+}
+
+void mpi_read_xvgs(boost::mpi::communicator &world,
+                   std::vector<summary_data> &vec_sd,
+                   vecofstrings dist_filenames,
+                   vecofstrings forc_filenames,
+                   unsigned long num_pairs) {
+
+    std::vector<simdata> vec_global_sim_data;
+    simdata local_sim_data;
+    int rank = world.rank();
+    int num_ranks = world.size();
+    std::vector<vecofstrings> scattered_files;
+
+    // First the distance files
+    {
+        scattered_files = scatter_files(dist_filenames, num_ranks);
+        if (rank < scattered_files.size()) {
+            local_sim_data = read_sim_xvgs(scattered_files.at(rank), num_pairs, true);
+        }
+
+        boost::mpi::all_gather(world, local_sim_data, vec_global_sim_data);
+        if (rank == 0) {
+            for (auto &global_sim_data: vec_global_sim_data) { // Get the data from a particular rank
+                if (!global_sim_data.empty())
+                    vec2sd(global_sim_data, vec_sd, true, false);
+            }
+        }
+    }
+    {
+        scattered_files = scatter_files(forc_filenames, num_ranks);
+        if (rank < scattered_files.size()) {
+            local_sim_data = read_sim_xvgs(scattered_files.at(rank), num_pairs, false);
+        }
+
+        boost::mpi::all_gather(world, local_sim_data, vec_global_sim_data);
+        if (rank == 0) {
+            for (auto &global_sim_data: vec_global_sim_data) { // Get the data from a particular rank
+                if (!global_sim_data.empty())
+                    vec2sd(global_sim_data, vec_sd, false, true);
+            }
+        }
+    }
+
+    mpi::broadcast(world, vec_sd, 0);
 }
 
 void generate_ndx_files(std::string gmx_exe,
@@ -394,4 +474,22 @@ void make_mdp(std::vector<pair_data> vec_pd,
     }
     infile.close();
     fclose(rouxfile);
+}
+
+void read_histograms(std::string dif_filename, std::vector<summary_data>& vec_sd) {
+
+    int pair_num{0};
+    std::ifstream infile(dif_filename);
+    std::string line;
+
+    std::getline(infile, line); // do once to handle bin width, sigma, min, max at top
+    while (std::getline(infile, line)) {
+        auto tokens = strtok(const_cast<char *>(line.c_str()), ",");
+        while (tokens != NULL) {
+            vec_sd[pair_num].hist_difference.push_back(std::stod(tokens));
+            tokens = strtok(NULL, ",");
+        }
+        ++pair_num;
+    }
+    infile.close();
 }

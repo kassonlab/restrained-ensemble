@@ -15,7 +15,7 @@ include_directories(/home/jmh/gromacs-roux/src/programs/mdrun)
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
-set(SOURCE_FILES main.cpp ensemble.cpp rouxfileio.cpp rouxalgorithms.cpp jsoncpp.cpp)
+set(SOURCE_FILES main.cpp ensemble.cpp rouxfileio.cpp rouxalgorithms.cpp jsoncpp.cpp logging.cpp logging.h)
 add_executable(Roux ${SOURCE_FILES})
 if (MPI_COMPILE_FLAGS)
     set_target_properties(Roux PROPERTIES COMPILE_FLAGS "${MPI_COMPILE_FLAGS}")

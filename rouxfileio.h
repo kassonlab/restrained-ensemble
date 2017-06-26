@@ -22,4 +22,18 @@ void mpi_read_xvgs(boost::mpi::communicator &world,
                    unsigned long num_pairs,
                    bool skip_time);
 
+vecofstrings make_dat(const char *dat_filename,
+                      std::vector<pair_data> vec_pd,
+                      parameters params);
+
+void generate_ndx_files(std::string gmx_exe,
+                        gromacs_files name,
+                        std::string dat,
+                        bool rewrite);
+
+void make_mdp(std::vector<pair_data> vec_pd,
+              input_filenames input_files,
+              parameters params,
+              vecofstrings pull_coord);
+
 #endif //ROUX_ROUXFILEIO_H

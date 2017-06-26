@@ -4,11 +4,13 @@ project(Roux)
 set(CMAKE_CXX_STANDARD 11)
 
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost COMPONENTS mpi filesystem REQUIRED)
+find_package(Boost COMPONENTS mpi filesystem program_options REQUIRED)
 if (Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIR})
     link_directories(${Boost_LIBRARY_DIR})
 endif ()
+
+include_directories(/home/jmh/gromacs-roux/src/programs/mdrun)
 
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
@@ -23,4 +25,6 @@ if (MPI_LINK_FLAGS)
     set_target_properties(Roux PROPERTIES LINK_FLAGS "${MPI_LINK_FLAGS}")
 endif ()
 
-target_link_libraries(Roux ${Boost_LIBRARIES} ${MPI_LIBRARIES})
+target_link_libraries(Roux ${Boost_LIBRARIES} ${MPI_LIBRARIES}
+        /home/jmh/gromacs-roux/mpibuild/lib/libmdrun_lib.so
+        /home/jmh/gromacs-roux/mpibuild/lib/libgromacs_mpi.so)

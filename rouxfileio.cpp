@@ -5,7 +5,9 @@
 #include <fstream>
 #include "json/json.h"
 #include "rouxfileio.h"
+#include "rouxalgorithms.h"
 #include <boost/property_tree/ini_parser.hpp>
+#include <boost/filesystem.hpp>
 
 namespace mpi = boost::mpi;
 
@@ -27,8 +29,12 @@ std::vector<T> str2vec(std::string tokens) {
     return result;
 }
 
+void warn_file_exists(const char *filename) {
+    printf("WARNING: The file %s already exists: use rewrite=true to override\n", filename);
+}
+
 void parse_ini(const char *ini_filename,
-               std::vector<pair_data>& vec_pd,
+               std::vector<pair_data> &vec_pd,
                input_filenames &in_filenames,
                prefixes &prefs, parameters &pars) {
     using namespace boost::property_tree;
@@ -149,7 +155,7 @@ std::vector<vecofstrings> scatter_files(vecofstrings filenames, unsigned long nu
     result.resize(num_used_ranks);
 
     int rank{0};
-    for (int i = 0; i < num_files; ++i){
+    for (int i = 0; i < num_files; ++i) {
         if (rank >= num_used_ranks) rank = 0;
         result[rank].push_back(filenames[i]);
         ++rank;
@@ -213,4 +219,179 @@ void mpi_read_xvgs(boost::mpi::communicator &world,
         }
     }
     mpi::broadcast(world, vec_pd, 0);
+}
+
+void generate_ndx_files(std::string gmx_exe,
+                        gromacs_files name,
+                        std::string dat,
+                        bool rewrite) {
+    if (boost::filesystem::exists(name.ndx) && !rewrite)
+        warn_file_exists(name.ndx.c_str());
+    else {
+        char buffer[BUFFER_LENGTH];
+        snprintf(buffer, BUFFER_LENGTH, "%s select -sf %s -f %s -s %s -on %s",
+                 gmx_exe.c_str(),
+                 dat.c_str(),
+                 name.xtc.c_str(),
+                 name.tpr.c_str(),
+                 name.ndx.c_str());
+        system(buffer);
+    }
+
+}
+
+vecofstrings make_dat(const char *dat_filename, std::vector<pair_data> vec_pd, parameters params) {
+    vecofstrings groups, ionnames;
+    std::vector<int> first_resids, second_resids, temp_first_reids, temp_second_resids;
+    int first_num, second_num;
+    std::string atomname, water;
+
+    std::vector<std::pair<int, int>> pairs;
+
+    for (auto &pd: vec_pd) {
+        pairs.push_back(pd.residue_ids);
+    }
+
+    std::tie(first_resids, second_resids) = unique_from_pairs(pairs);
+    if (params.aa) {
+        atomname = {"CB"};
+        ionnames = {"NA", "CL"};
+        water = "SOL";
+    } else {
+        atomname = "BB";
+        ionnames = {"ION", "ION"};
+        water = "W";
+    }
+    FILE *dat_file = fopen(dat_filename, "w");
+    if (params.chains == 1) {
+        fprintf(dat_file, "Pull_ref = name %s and resid %i;\n", atomname.c_str(), params.ref);
+        groups.push_back("Pull_ref");
+        fprintf(dat_file, "System = "
+                        "group \"Protein\" or resname %s or resname %s or resname %s or resname %s;\n\n",
+                water.c_str(), ionnames.at(0).c_str(), ionnames.at(1).c_str(), params.lipid.c_str());
+        first_num = 0;
+        second_num = 0;
+        for (auto first_resid: first_resids) {
+            fprintf(dat_file, "first_%i = name %s and resid %i;\n",
+                    first_num, atomname.c_str(), first_resid);
+            groups.push_back("first_" + std::to_string(first_num));
+            ++first_num;
+        }
+        for (auto second_resid: second_resids) {
+            fprintf(dat_file, "second_%i = name %s and resid %i;\n",
+                    second_num, atomname.c_str(), second_resid);
+            groups.push_back("second_" + std::to_string(second_num));
+            ++second_num;
+        }
+    }
+
+    if (params.chains == 2) {
+        fprintf(dat_file, "Pull_ref = chain B and name %s and resid %i;\n",
+                atomname.c_str(), params.ref);
+        groups.push_back("Pull_ref");
+        fprintf(dat_file, "System = "
+                        "group \"Protein\" or resname %s or resname %s or resname %s or resname %s;\n\n",
+                water.c_str(), ionnames.at(0).c_str(), ionnames.at(1).c_str(), params.lipid.c_str());
+        first_num = 0;
+        second_num = 0;
+        for (auto first_resid: first_resids) {
+            fprintf(dat_file, "first_%i = chain A and name %s and resid %i;\n",
+                    first_num, atomname.c_str(), first_resid);
+            groups.push_back("first_" + std::to_string(first_num));
+            ++first_num;
+        }
+        for (auto second_resid: second_resids) {
+            fprintf(dat_file, "second_%i = chain B and name %s and resid %i;\n",
+                    second_num, atomname.c_str(), second_resid);
+            groups.push_back("second_" + std::to_string(second_num));
+            ++second_num;
+        }
+    }
+    groups.push_back("System");
+    for (auto group: groups) {
+        fprintf(dat_file, "\n%s;\n", group.c_str());
+    }
+    fclose(dat_file);
+    groups.pop_back();
+    return groups;
+}
+
+std::vector<std::pair<long, long>> resis_to_groups(std::vector<std::pair<int, int>> pairs) {
+    auto n_pairs = pairs.size();
+    std::vector<int> first_unique, second_unique;
+    std::vector<std::pair<long, long>> groups(n_pairs);
+    std::pair<int, int> zero_pair = {0, 0};
+    std::fill(groups.begin(), groups.end(), zero_pair);
+
+    std::tie(first_unique, second_unique) = unique_from_pairs(pairs);
+    auto n_first = first_unique.size();
+
+    for (int i = 0; i < n_pairs; ++i) {
+        auto first_group = std::distance(first_unique.begin(),
+                                         std::find(first_unique.begin(),
+                                                   first_unique.end(),
+                                                   pairs[i].first));
+        auto second_group = std::distance(second_unique.begin(),
+                                          std::find(second_unique.begin(),
+                                                    second_unique.end(),
+                                                    pairs[i].second));
+
+        groups[i].first = first_group + 2;
+        groups[i].second = second_group + n_first + 2;
+    }
+
+    return groups;
+}
+
+void write_roux_pull_entry(std::pair<int, int> a_pair, FILE *roux_file, int coord_ind, double k) {
+    fprintf(roux_file, "\npull-coord%i-type = roux\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-geometry = distance-reference\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-groups = %i %i 1\n", coord_ind, a_pair.first, a_pair.second);
+    fprintf(roux_file, "pull-coord%i-dim = Y Y Y\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-origin = 0.0 0.0 0.0\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-vec = 0.0 0.0 0.0\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-start = no\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-init = 0.0\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-rate = 0.0\n", coord_ind);
+    fprintf(roux_file, "pull-coord%i-k = %f\n", coord_ind, k);
+    fprintf(roux_file, "pull-coord%i-kB = 0\n", coord_ind);
+}
+
+void make_mdp(std::vector<pair_data> vec_pd,
+              input_filenames input_files,
+              parameters params,
+              vecofstrings pull_coord) {
+
+    std::vector<std::pair<int, int>> pairs;
+    std::vector<double> k;
+
+    for (auto &pd: vec_pd) {
+        pairs.push_back(pd.residue_ids);
+        k.push_back(pd.k);
+    }
+
+    FILE *rouxfile = fopen(input_files.roux_mdp.c_str(), "w");
+
+    std::ifstream infile(input_files.mdp_template);
+    std::string line;
+    auto n_groups = pull_coord.size();
+    auto n_coords = pairs.size();
+
+    while (std::getline(infile, line)) {
+        fprintf(rouxfile, "%s\n", line.c_str());
+        if (line.find("pull-nstfout") != std::string::npos) {
+            fprintf(rouxfile, "pull_ngroups = %lu \n", n_groups);
+            fprintf(rouxfile, "pull_ncoords = %lu \n", n_coords);
+            auto group_pairs = resis_to_groups(pairs);
+            for (int i = 0; i < n_groups; ++i) {
+                fprintf(rouxfile, "pull-group%i-name = %s\n", i + 1, pull_coord.at(i).c_str());
+            }
+            for (int i = 0; i < n_coords; ++i) {
+                write_roux_pull_entry(group_pairs[i], rouxfile, i + 1, k[i]);
+            }
+
+        }
+    }
+    infile.close();
+    fclose(rouxfile);
 }

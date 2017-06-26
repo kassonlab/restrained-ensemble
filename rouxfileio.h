@@ -8,6 +8,8 @@
 #include <boost/mpi.hpp>
 #include "common.h"
 
+void warn_file_exists(const char *filename);
+
 void parse_ini(const char *ini_filename,
                std::vector<pair_data>& vec_pd,
                input_filenames& in_filenames,

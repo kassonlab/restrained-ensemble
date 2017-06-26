@@ -4,11 +4,23 @@
 
 #include "common.h"
 #include <fstream>
+#include <dirent.h>
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
+#include <boost/regex.hpp>
+#include "rouxfileio.h"
 
 using boost::str;
 using boost::format;
+
+std::string strip_filename(std::string filename) {
+    std::string stripped_filename;
+    boost::replace_all(filename, "_cntr", "");
+    boost::replace_all(filename, "_whole", "");
+    stripped_filename = filename.substr(0, filename.size() - 4);
+    return stripped_filename;
+}
 
 template <typename T>
 std::vector<T> unique_elements(std::vector<T> vec) {
@@ -37,6 +49,34 @@ void backup_file(std::string filename, int ensemble_number) {
              ensemble_number,
              filename.substr(length - 3, length).c_str());
     system(buffer);
+}
+
+int find_last_run_number(std::string ensemble_path,
+                         std::string directory_prefix,
+                         int replica) {
+
+    int max_ensemble_number = 0;
+
+    char directory_name[BUFFER_LENGTH];
+    std::snprintf(directory_name, BUFFER_LENGTH, "%s/%s_%02i/",
+                  ensemble_path.c_str(), directory_prefix.c_str(), replica);
+
+    std::string pattern = "^.+part([0-9][0-9][0-9][0-9])[.]log$";
+    boost::regex reg{pattern};
+    DIR *dir;
+    struct dirent *ent;
+        if ((dir = opendir(directory_name)) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            boost::cmatch cm;
+            if (boost::regex_search(ent->d_name, cm, reg)) {
+                std::string lognum = cm.str(1);
+                int intlognum = std::stoi(lognum);
+                max_ensemble_number = std::max(max_ensemble_number, intlognum);
+            }
+        }
+        closedir(dir);
+    }
+    return max_ensemble_number + 1;
 }
 
 gromacs_files generate_gromacs_filenames(int ensemble_number, prefixes prefs, int replica,
@@ -89,6 +129,138 @@ std::vector<gromacs_files> generate_gromacs_filenames(int ensemble_number,
                                                        protein_ndx));
     }
     return gro_files;
+}
+
+
+void make_ndx(std::string tpr_filename,
+              std::string ndx_filename,
+              std::string selection,
+              std::string gmx_exe,
+              bool aa,
+              bool rewrite) {
+
+    if (rewrite || !boost::filesystem::exists(ndx_filename)) {
+        if (selection.empty()) {
+            if (aa) {
+                selection = "mol 1 and name CA; mol 2 and name CA; "
+                        "(mol 1 and name CA) or (mol 2 and name CA); mol 1 or mol 2";
+            } else {
+                selection = "mol 1 and name BB; mol 2 and name BB; "
+                        "(mol 1 and name BB) or (mol 2 and name BB); mol 1 or mol 2";
+            }
+        }
+
+        char command[BUFFER_LENGTH];
+        snprintf(command, BUFFER_LENGTH,
+                 "%s select -s %s -select \"%s\" -on %s",
+                 gmx_exe.c_str(),
+                 tpr_filename.c_str(),
+                 selection.c_str(),
+                 ndx_filename.c_str());
+        system(command);
+
+    } else warn_file_exists(ndx_filename.c_str());
+}
+
+void make_xvg(std::string tpr_filename,
+              std::string xtc_filename,
+              std::string xvg_filename,
+              int chains,
+              bool aa,
+              bool rewrite,
+              std::vector<std::pair<int, int>> pairs,
+              std::string gmx_exe) {
+
+    std::string selection, str_1AA, str_2AA, str_1BB, str_2BB;
+    std::vector<int> first, second;
+
+    if (rewrite or !boost::filesystem::exists(xvg_filename)) {
+        for (auto& pair: pairs) {
+            first.push_back(pair.first);
+            second.push_back(pair.second);
+        }
+
+        if (chains == 2) {
+            selection = "";
+            str_1AA = "mol 1 and name CA and resid ";
+            str_2AA = "mol 2 and name CA and resid ";
+            str_1BB = "mol 1 and name BB and resid ";
+            str_2BB = "mol 2 and name BB and resid ";
+        } else {
+            selection = "";
+            str_1AA = "name CA and resid ";
+            str_2AA = str_1AA;
+            str_1BB = "name BB and resid ";
+            str_2BB = str_1BB;
+
+        }
+
+        for (uint i = 0; i < pairs.size(); i++) {
+            if (aa) {
+                selection += str(format("\"(%s%i) or (%s%i)\"") % str_1AA % first.at(i) % str_2AA % second.at(i));
+            } else {
+                selection += str(format("\"(%s%i) or (%s%i)\"") % str_1BB % first.at(i) % str_2BB % second.at(i));
+            }
+        }
+
+        std::string command = str(format("%s distance -f %s -s %s -oall %s -select %s")
+                             % gmx_exe % xtc_filename % tpr_filename % xvg_filename % selection);
+        system(command.c_str());
+    } else warn_file_exists(xvg_filename.c_str());
+}
+
+void pre_process(gromacs_files name,
+                 int chains,
+                 bool aa,
+                 std::vector<std::pair<int, int>> pairs,
+                 std::string gmx_exe,
+                 bool rewrite) {
+
+    std::string echo1, echo2, whole_name, cntr_name, selection;
+
+    if (chains == 2) { //TODO: We got some problems here: where is selection defined?
+        make_ndx(name.tpr, name.ndx, selection, gmx_exe, aa, rewrite);
+        echo1 = "echo 3 3 | ";
+        echo2 = "echo 1 3 | ";
+    } else {
+        make_ndx(name.tpr, name.ndx, "group Protein", gmx_exe, aa, rewrite);
+        echo1 = "";
+        echo2 = "";
+    }
+
+    whole_name = strip_filename(name.xtc) + "_whole.xtc";
+    cntr_name = strip_filename(name.xtc) + "_cntr.xtc";
+
+    char buffer[BUFFER_LENGTH];
+
+    if (boost::filesystem::exists(whole_name) && !rewrite) {
+        warn_file_exists(whole_name.c_str());
+    } else {
+        snprintf(buffer, BUFFER_LENGTH, "%s %s trjconv -f %s -s %s -pbc whole -n %s -o %s",
+                 echo1.c_str(),
+                 gmx_exe.c_str(),
+                 name.xtc.c_str(),
+                 name.tpr.c_str(),
+                 name.ndx.c_str(),
+                 whole_name.c_str());
+        system(buffer);
+    }
+
+    if (boost::filesystem::exists(cntr_name) && !rewrite) {
+        warn_file_exists(cntr_name.c_str());
+    } else {
+        snprintf(buffer, BUFFER_LENGTH,
+                 "%s %s trjconv -f %s -s %s -pbc mol -ur compact -center -n %s -o %s",
+                 echo2.c_str(),
+                 gmx_exe.c_str(),
+                 whole_name.c_str(),
+                 name.tpr.c_str(),
+                 name.ndx.c_str(),
+                 cntr_name.c_str());
+        system(buffer);
+    }
+    make_xvg(name.tpr, cntr_name, name.xvg, chains, aa, rewrite, pairs, gmx_exe);
+
 }
 
 void calculate_histogram(std::vector<pair_data> vec_pd,

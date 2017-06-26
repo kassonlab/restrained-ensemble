@@ -54,19 +54,19 @@ int main(int argc, char **argv) {
     mpi::broadcast(world, check_forces, root);
 
     Ensemble ensemble(config_filename.c_str(), world);
+    int ensemble_number;
+    ensemble_number = ensemble.setup_restart(check_forces);
+    mpi::broadcast(world, ensemble_number, root);
+//    std::cout << "Restarting from ensemble number " << ensemble_number << std::endl;
     ensemble.input_names.differences = "/home/jmh/Research/test-roux-c/difference-files/testdiff.csv";
+    read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
 
-//    if (rank == 0) {
-        read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
-//    }
-//    mpi::broadcast(world, ensemble.vec_pd, 0);
-
-    ensemble.do_histogram(5);
+    ensemble.do_histogram(ensemble_number);
     if (grompp){
-        ensemble.do_mdp(5);
-        ensemble.do_grompp(5);
+        ensemble.do_mdp(ensemble_number);
+        ensemble.do_grompp(ensemble_number);
     }
-    ensemble.do_mdrun();
+//    ensemble.do_mdrun();
 
 
     return EXIT_SUCCESS;

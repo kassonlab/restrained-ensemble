@@ -12,6 +12,18 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
                          parameters params,
                          int ensemble_number);
 
+
+int find_last_run_number(std::string ensemble_path,
+                         std::string directory_prefix,
+                         int replica);
+
+void pre_process(gromacs_files name,
+                 int chains,
+                 bool aa,
+                 std::vector<std::pair<int, int>> pairs,
+                 std::string gmx_exe,
+                 bool rewrite);
+
 gromacs_files generate_gromacs_filenames(int ensemble_number,
                                 prefixes prefs,
                                 int replica,

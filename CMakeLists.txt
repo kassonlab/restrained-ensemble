@@ -4,7 +4,7 @@ project(Roux)
 set(CMAKE_CXX_STANDARD 11)
 
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost COMPONENTS mpi filesystem program_options REQUIRED)
+find_package(Boost COMPONENTS mpi filesystem program_options regex REQUIRED)
 if (Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIR})
     link_directories(${Boost_LIBRARY_DIR})

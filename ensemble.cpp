@@ -10,9 +10,61 @@
 
 namespace mpi = boost::mpi;
 
-Ensemble::Ensemble(const char *ini_filename, boost::mpi::communicator &comm) {
+Ensemble::Ensemble(const char *ini_filename, mpi::communicator &comm) {
     parse_ini(ini_filename, vec_pd, input_names, prefs, params);
     world = comm;
+}
+
+int Ensemble::setup_restart(bool check_forces) {
+    int ensemble_number{0};
+    int rank = world.rank();
+    if (rank >= params.num_replicas) {
+        return ensemble_number;
+    }
+
+    auto replica = params.replicas[rank];
+    ensemble_number = find_last_run_number(prefs.ensemble_path,
+                                               prefs.directory_prefix,
+                                               params.replicas[0]);
+
+
+    if (ensemble_number > 1) {
+        auto names = generate_gromacs_filenames(ensemble_number, prefs, replica, false, false);
+        if (!boost::filesystem::exists(names.gro)) {
+            char buffer[BUFFER_LENGTH];
+            snprintf(buffer, BUFFER_LENGTH,
+                     "echo 0 | %s trjconv -f %s -s %s -o %s",
+                     input_names.gmx_exe.c_str(),
+                     names.xtc.c_str(),
+                     names.tpr.c_str(),
+                     names.gro.c_str());
+            system(buffer);
+        }
+//        char buffer[BUFFER_LENGTH];
+//        snprintf(buffer, BUFFER_LENGTH, "%s/summary.part%04i.txt",
+//                 summaryWriter.params.log_dir.c_str(),
+//                 ensemble_number - 1);
+//        if (!boost::filesystem::exists(buffer) && rank == 0) {
+//            summaryWriter.write_summary(ensemble_number - 1, check_forces);
+//        }
+
+    } else {
+        auto names = generate_gromacs_filenames(ensemble_number, prefs,
+                                                replica,
+                                                true, true);
+        std::vector<std::pair<int, int>> pairs;
+        for (auto &pd: vec_pd) {
+            pairs.push_back(pd.residue_ids);
+        }
+
+        pre_process(names,
+                    params.chains,
+                    params.aa,
+                    pairs,
+                    input_names.gmx_exe,
+                    false);
+    }
+    return ensemble_number;
 }
 
 void Ensemble::do_histogram(int ensemble_number) {

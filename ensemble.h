@@ -7,6 +7,7 @@
 
 #include <boost/mpi.hpp>
 #include "common.h"
+#include "logging.h"
 
 class Ensemble {
 public:
@@ -17,11 +18,12 @@ public:
     boost::mpi::communicator world;
 
     Ensemble(const char * ini_filename, boost::mpi::communicator& comm);
+    void link_to_logging(Logging &logger);
     void do_histogram(int ensemble_number);
     void do_mdp(int ensemble_number);
     void do_grompp(int ensemble_number);
     void do_mdrun();
-    int setup_restart(bool check_forces=false);
+    int setup_restart(Logging &logger, bool check_forces=false);
 };
 
 

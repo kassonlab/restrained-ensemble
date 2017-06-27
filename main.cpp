@@ -3,25 +3,9 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include "ensemble.h"
-#include "logging.h"
 #include "rouxfileio.h"
 
 namespace mpi = boost::mpi;
-
-void link_to_ensemble(Ensemble &ensemble, Logging &logger){
-    logger.params = ensemble.params;
-    logger.input_names = ensemble.input_names;
-    logger.prefs = ensemble.prefs;
-    logger.world = ensemble.world;
-    logger.vec_sd.resize(ensemble.params.num_pairs);
-    for (int i = 0; i < logger.vec_sd.size(); ++i){
-        auto logger_vec_sd = &logger.vec_sd[i];
-        auto ensemb_vec_pd = &ensemble.vec_pd[i];
-        logger_vec_sd->residue_ids = ensemb_vec_pd->residue_ids;
-        logger_vec_sd->k = ensemb_vec_pd->k;
-        logger_vec_sd->exp_distribution = ensemb_vec_pd->exp_distribution;
-    }
-}
 
 int main(int argc, char **argv) {
     mpi::environment env(argc, argv);
@@ -62,7 +46,7 @@ int main(int argc, char **argv) {
         config_filename = vm.count("config") ? vm["config"].as<std::string>() :
                           "roux.ini";
 
-        if (!boost::filesystem::exists(config_filename)){
+        if (!boost::filesystem::exists(config_filename)) {
             char error[BUFFER_LENGTH];
             snprintf(error, BUFFER_LENGTH, "The configuration file %s does not exist: "
                     "please provide a valid configuration file.", config_filename.c_str());
@@ -77,24 +61,30 @@ int main(int argc, char **argv) {
     mpi::broadcast(world, n, root);
     mpi::broadcast(world, grompp, root);
     mpi::broadcast(world, check_forces, root);
-
     Ensemble ensemble(config_filename.c_str(), world);
     Logging logger;
     int ensemble_number;
-    ensemble_number = ensemble.setup_restart(check_forces);
-    mpi::broadcast(world, ensemble_number, root);
-    ensemble.input_names.differences = getenv("HISTDIF");
 
+    ensemble.input_names.differences = getenv("HISTDIF");
     read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
-    link_to_ensemble(ensemble, logger);
+    ensemble.link_to_logging(logger);
+    ensemble_number = ensemble.setup_restart(logger, check_forces);
+    mpi::broadcast(world, ensemble_number, root);
 
     ensemble.do_histogram(ensemble_number);
-    if (grompp){
+    if (grompp) {
         ensemble.do_mdp(ensemble_number);
         ensemble.do_grompp(ensemble_number);
     }
-//    ensemble.do_mdrun();
-    logger.write_summary(ensemble_number, check_forces);
+
+    int iter{0};
+    while (iter < n) {
+        ensemble.do_mdrun();
+        ensemble.do_histogram(ensemble_number + 1);
+        logger.write_summary(ensemble_number, check_forces);
+        ++ensemble_number;
+        ++iter;
+    }
 
     return EXIT_SUCCESS;
 }

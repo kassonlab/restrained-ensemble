@@ -31,9 +31,7 @@ void Logging::read_summary_data(int part) {
                                   % prefs.prod_prefix
                                   % part));
     }
-//    std::cout << "Before reading xvgs" << std::endl;
     mpi_read_xvgs(world, vec_sd, dist_files, force_files, params.num_pairs);
-
     if (world.rank() == 0) read_histograms(hist_difs, vec_sd);
     mpi::broadcast(world, vec_sd, 0);
 }

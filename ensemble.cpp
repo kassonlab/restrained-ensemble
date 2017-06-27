@@ -15,38 +15,59 @@ Ensemble::Ensemble(const char *ini_filename, mpi::communicator &comm) {
     world = comm;
 }
 
-int Ensemble::setup_restart(bool check_forces) {
+void Ensemble::link_to_logging(Logging &logger) {
+    logger.params = params;
+    logger.input_names = input_names;
+    logger.prefs = prefs;
+    logger.world = world;
+    logger.vec_sd.resize(params.num_pairs);
+    for (int i = 0; i < logger.vec_sd.size(); ++i) {
+        auto logger_vec_sd = &logger.vec_sd[i];
+        auto ensemb_vec_pd = &vec_pd[i];
+        logger_vec_sd->residue_ids = ensemb_vec_pd->residue_ids;
+        logger_vec_sd->k = ensemb_vec_pd->k;
+        logger_vec_sd->exp_distribution = ensemb_vec_pd->exp_distribution;
+    }
+}
+
+int Ensemble::setup_restart(Logging &logger, bool check_forces) {
     int ensemble_number{0};
     int rank = world.rank();
-    if (rank >= params.num_replicas) {
-        return ensemble_number;
+//    if (rank >= params.num_replicas) {
+//        return ensemble_number;
+//    }
+
+    int replica{0};
+    if (rank < params.num_replicas) {
+        replica = params.replicas[rank];
     }
 
-    auto replica = params.replicas[rank];
     ensemble_number = find_last_run_number(prefs.ensemble_path,
-                                               prefs.directory_prefix,
-                                               params.replicas[0]);
+                                           prefs.directory_prefix,
+                                           params.replicas[0]);
 
 
     if (ensemble_number > 1) {
-        auto names = generate_gromacs_filenames(ensemble_number, prefs, replica, false, false);
-        if (!boost::filesystem::exists(names.gro)) {
-            char buffer[BUFFER_LENGTH];
-            snprintf(buffer, BUFFER_LENGTH,
-                     "echo 0 | %s trjconv -f %s -s %s -o %s",
-                     input_names.gmx_exe.c_str(),
-                     names.xtc.c_str(),
-                     names.tpr.c_str(),
-                     names.gro.c_str());
-            system(buffer);
+        if (rank < params.num_replicas) {
+            auto names = generate_gromacs_filenames(ensemble_number, prefs, replica, false, false);
+            if (!boost::filesystem::exists(names.gro)) {
+                char buffer[BUFFER_LENGTH];
+                snprintf(buffer, BUFFER_LENGTH,
+                         "echo 0 | %s trjconv -f %s -s %s -o %s",
+                         input_names.gmx_exe.c_str(),
+                         names.xtc.c_str(),
+                         names.tpr.c_str(),
+                         names.gro.c_str());
+                system(buffer);
+            }
         }
-//        char buffer[BUFFER_LENGTH];
-//        snprintf(buffer, BUFFER_LENGTH, "%s/summary.part%04i.txt",
-//                 summaryWriter.params.log_dir.c_str(),
-//                 ensemble_number - 1);
-//        if (!boost::filesystem::exists(buffer) && rank == 0) {
-//            summaryWriter.write_summary(ensemble_number - 1, check_forces);
-//        }
+        char buffer[BUFFER_LENGTH];
+        snprintf(buffer, BUFFER_LENGTH, "%s/summary.part%04i.txt",
+                 logger.input_names.log_dir.c_str(),
+                 ensemble_number - 1);
+        if (!boost::filesystem::exists(buffer)) {
+            logger.write_summary(ensemble_number - 1, check_forces);
+        }
 
     } else {
         auto names = generate_gromacs_filenames(ensemble_number, prefs,
@@ -99,7 +120,7 @@ void Ensemble::do_histogram(int ensemble_number) {
     mpi::broadcast(world, xvgs, 0);
     mpi_read_xvgs(world, vec_pd, xvgs, params.num_pairs, true);
     world.barrier();
-//    std::cout << vec_pd[0].sim_dist_data.at(2) << std::endl;
+
     if (rank == 0) {
         calculate_histogram(vec_pd,
                             input_names.differences.c_str(),

@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
     mpi::broadcast(world, ensemble_number, root);
 
     ensemble.do_histogram(ensemble_number);
+
     if (grompp) {
         ensemble.do_mdp(ensemble_number);
         ensemble.do_grompp(ensemble_number);

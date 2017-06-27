@@ -268,8 +268,9 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
                          parameters params,
                          int ensemble_number) {
 
+
     if (boost::filesystem::exists(out_filename)) {
-        backup_file(out_filename, ensemble_number);
+        backup_file(out_filename, ensemble_number-1);
     }
 
     std::ofstream hist_file;
@@ -304,6 +305,7 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
         }
         hist_file << "\n";
     }
+    hist_file.close();
 }
 
 std::vector<std::string> mdrun_chararray(parameters params, prefixes prefs, int &argc) {

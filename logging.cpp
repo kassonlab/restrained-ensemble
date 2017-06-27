@@ -49,7 +49,7 @@ void Logging::calculate_forces() {
                 exponential = exp(-pow(x, 2) / (2 * pow(params.sigma, 2)));
                 force -= sd.hist_difference[bin_num] * x * exponential;
             }
-            sd.calc_forc_data[sample] = norm * force;
+            sd.calc_forc_data[sample] = (float) (norm * force);
         }
     }
 }
@@ -92,8 +92,6 @@ void Logging::write_header(std::ofstream &outfile) {
 }
 
 void Logging::write_summary(int part, bool check_forces) {
-//    simdata dists, time_and_forces, dummy, histogram_difference, forces_check;
-//    printf("INFO: Writing summary to file\n");
 
     read_summary_data(part);
     auto num_samples = vec_sd[0].sim_time_data.size();
@@ -102,8 +100,8 @@ void Logging::write_summary(int part, bool check_forces) {
         calculate_forces();
     }
 
-    char buffer[BUFFER_LENGTH];
     for (auto &sd: vec_sd) {
+        char buffer[BUFFER_LENGTH];
         std::snprintf(buffer, BUFFER_LENGTH, "%s/pair%03i_%03i.part%04i.txt",
                       input_names.log_dir.c_str(),
                       sd.residue_ids.first,
@@ -117,7 +115,7 @@ void Logging::write_summary(int part, bool check_forces) {
             summary_file << sd.sim_time_data[i] << "\t";
             summary_file.precision(6);
             summary_file << sd.sim_dist_data[i] << "\t";
-            summary_file << sd.sim_forc_data[i] << "\t"; // j+1 since first column is time
+            summary_file << sd.sim_forc_data[i] << "\t";
 
             if (check_forces) {
                 summary_file << sd.calc_forc_data[i] << "\t";

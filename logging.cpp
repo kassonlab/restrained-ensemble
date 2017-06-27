@@ -14,8 +14,8 @@ void Logging::read_summary_data(int part) {
     std::vector<std::string> dist_files, force_files;
     std::string hist_difs;
     hist_difs = str(format("%s.part%04i.csv") %
-                                    input_names.differences.substr(0, input_names.differences.length() - 4) %
-                                    part);
+                    input_names.differences.substr(0, input_names.differences.length() - 4) %
+                    part);
 
     for (auto ensemble_member: params.replicas) {
         dist_files.push_back(str(format("%s/%s_%02i/%s_pullx.part%04i.xvg")
@@ -39,9 +39,11 @@ void Logging::read_summary_data(int part) {
 void Logging::calculate_forces() {
     for (auto &sd: vec_sd) {
         auto n_samples = sd.sim_dist_data.size();
+//        std::cout << n_samples << " rank " << world.rank() << std::endl;
         sd.calc_forc_data.resize(n_samples);
         double force, x, exponential;
         auto norm = sd.k / (pow(params.sigma, 3) * sqrt(2 * M_PI));
+
         for (int sample = 0; sample < n_samples; ++sample) {
             force = 0;
             for (int bin_num = 0; bin_num < params.num_bins; ++bin_num) {
@@ -92,15 +94,17 @@ void Logging::write_header(std::ofstream &outfile) {
 }
 
 void Logging::write_summary(int part, bool check_forces) {
+    int rank = world.rank();
 
     read_summary_data(part);
     auto num_samples = vec_sd[0].sim_time_data.size();
 
-    if (check_forces) {
+    if (check_forces && rank == 0) {
         calculate_forces();
     }
 
-    for (auto &sd: vec_sd) {
+    if (rank < params.num_pairs) {
+        auto sd = vec_sd[rank];
         char buffer[BUFFER_LENGTH];
         std::snprintf(buffer, BUFFER_LENGTH, "%s/pair%03i_%03i.part%04i.txt",
                       input_names.log_dir.c_str(),
@@ -124,5 +128,6 @@ void Logging::write_summary(int part, bool check_forces) {
         }
         summary_file.close();
     }
+    world.barrier();
 //    printf("INFO: Finished writing summary to file\n");
 }

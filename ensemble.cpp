@@ -27,6 +27,7 @@ void Ensemble::link_to_logging(Logging &logger) {
         logger_vec_sd->residue_ids = ensemb_vec_pd->residue_ids;
         logger_vec_sd->k = ensemb_vec_pd->k;
         logger_vec_sd->exp_distribution = ensemb_vec_pd->exp_distribution;
+        logger_vec_sd->hist_difference.resize(ensemb_vec_pd->exp_distribution.size());
     }
 }
 
@@ -61,13 +62,17 @@ int Ensemble::setup_restart(Logging &logger, bool check_forces) {
                 system(buffer);
             }
         }
+
         char buffer[BUFFER_LENGTH];
-        snprintf(buffer, BUFFER_LENGTH, "%s/summary.part%04i.txt",
-                 logger.input_names.log_dir.c_str(),
-                 ensemble_number - 1);
-        if (!boost::filesystem::exists(buffer)) {
-            logger.write_summary(ensemble_number - 1, check_forces);
+        bool summaries_exist{true};
+        for (int i = 0; i < params.num_pairs; ++i) {
+            snprintf(buffer, BUFFER_LENGTH, "%s/pair%03i_%03i.part%04i.txt",
+                     logger.input_names.log_dir.c_str(),
+                     vec_pd[i].residue_ids.first, vec_pd[i].residue_ids.second,
+                     ensemble_number - 1);
+            if (!boost::filesystem::exists(buffer)) summaries_exist = false;
         }
+        if (!summaries_exist) logger.write_summary(ensemble_number - 1, check_forces);
 
     } else {
         auto names = generate_gromacs_filenames(ensemble_number, prefs,

@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     mpi::environment env(argc, argv);
     mpi::communicator world;
     int rank = world.rank();
-    int root{0}, n{1};
+    int root{0}, n{1}, ensemble_number{0};
     std::string config_filename;
     bool grompp{false}, check_forces{false};
 
@@ -61,14 +61,16 @@ int main(int argc, char **argv) {
     mpi::broadcast(world, n, root);
     mpi::broadcast(world, grompp, root);
     mpi::broadcast(world, check_forces, root);
+
     Ensemble ensemble(config_filename.c_str(), world);
     Logging logger;
-    int ensemble_number;
 
     ensemble.input_names.differences = getenv("HISTDIF");
     read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
+
     ensemble.link_to_logging(logger);
     ensemble_number = ensemble.setup_restart(logger, check_forces);
+
     mpi::broadcast(world, ensemble_number, root);
 
     ensemble.do_histogram(ensemble_number);
@@ -76,16 +78,17 @@ int main(int argc, char **argv) {
     if (grompp) {
         ensemble.do_mdp(ensemble_number);
         ensemble.do_grompp(ensemble_number);
-    }
+        return EXIT_SUCCESS;
+    } else {
+        int iter{0};
+        while (iter < n) {
+            ensemble.do_mdrun();
+            ensemble.do_histogram(ensemble_number + 1);
+            logger.write_summary(ensemble_number, check_forces);
+            ++ensemble_number;
+            ++iter;
+        }
 
-    int iter{0};
-    while (iter < n) {
-        ensemble.do_mdrun();
-        ensemble.do_histogram(ensemble_number + 1);
-        logger.write_summary(ensemble_number, check_forces);
-        ++ensemble_number;
-        ++iter;
+        return EXIT_SUCCESS;
     }
-
-    return EXIT_SUCCESS;
 }

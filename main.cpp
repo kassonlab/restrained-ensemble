@@ -1,4 +1,4 @@
-
+#include <chrono>
 #include <boost/mpi.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -11,8 +11,9 @@ int main(int argc, char **argv) {
     mpi::environment env(argc, argv);
     mpi::communicator world;
     int rank = world.rank();
-    int root{0}, n{1}, ensemble_number{0};
+    int root{0}, ensemble_number{0};
     std::string config_filename;
+    double max_time_double{1.0};
     bool grompp{false}, check_forces{false};
 
     if (rank == root) {
@@ -24,16 +25,22 @@ int main(int argc, char **argv) {
                         "\t(http://pubs.acs.org/doi/abs/10.1021/jp3110369)\n"
                         "\t\t===================================\n"
         };
-        desc.add_options()("help,h", "Help screen")(
-                "num,n", value<int>()->default_value(1),
-                "Number of mdrun iterations to perform")
-                ("config,f",
-                 value<std::string>()->default_value("roux.ini"),
-                 "Configuration file")
-                ("grompp,g", "Only run grompp. "
-                        "This will generate tprs, but will not call mdrun: "
-                        "if you use this option, be aware that -n and -c become meaningless")
-                ("checkf,c", "Check forces?");
+        desc.add_options()("help,h", "Help screen")
+                (
+                        "time,t", value<double>()->default_value(1.0),
+                        "Maximum time to run the code (hours)"
+                )
+                (
+                        "config,f", value<std::string>()->default_value("roux.ini"),
+                        "Configuration file")
+                (
+                        "grompp,g",
+                        "Only run grompp. This will generate tprs, but will not call mdrun: "
+                                "if you use this option, be aware that -n and -c become meaningless"
+                )
+                (
+                        "checkf,c", "Check forces?"
+                );
 
         variables_map vm;
         store(parse_command_line(argc, const_cast<const char **>(argv), desc), vm);
@@ -52,15 +59,18 @@ int main(int argc, char **argv) {
                     "please provide a valid configuration file.", config_filename.c_str());
             throw std::invalid_argument(error);
         }
-        n = vm.count("num") ? vm["num"].as<int>() : 1;
         grompp = (bool) vm.count("grompp");
         check_forces = (bool) vm.count("checkf");
+
+        max_time_double = vm.count("time") ? vm["time"].as<double>() : 1.0;
     }
 
     mpi::broadcast(world, config_filename, root);
-    mpi::broadcast(world, n, root);
     mpi::broadcast(world, grompp, root);
     mpi::broadcast(world, check_forces, root);
+    mpi::broadcast(world, max_time_double, root);
+
+    std::chrono::duration<double, std::ratio<60>> max_time(max_time_double);
 
     Ensemble ensemble(config_filename.c_str(), world);
     Logging logger;
@@ -80,15 +90,38 @@ int main(int argc, char **argv) {
         ensemble.do_grompp(ensemble_number);
         return EXIT_SUCCESS;
     } else {
-        int iter{0};
-        while (iter < n) {
+        std::chrono::time_point<std::chrono::system_clock> start, end;
+        std::chrono::duration<double, std::ratio<60>> iter_time;
+        std::chrono::duration<double, std::ratio<60>> max_iter_time;
+        std::chrono::duration<double, std::ratio<3600>> accum_time;
+
+        int iter{1};
+        while ((accum_time + max_iter_time) < max_time) {
+
+            start = std::chrono::system_clock::now();
+
             ensemble.do_mdrun();
             ensemble.do_histogram(ensemble_number + 1);
             logger.write_summary(ensemble_number, check_forces);
             ++ensemble_number;
+
+            end = std::chrono::system_clock::now();
+
+            iter_time = end - start;
+
+            max_iter_time = std::max(iter_time, max_iter_time);
+            accum_time += max_iter_time;
+
+            if (rank == root){
+                char info[50];
+                snprintf(info, 50, "%sINFO%s", colors.OKBLUE, colors.ENDC);
+                printf("%s Current iteration time: %f min\n"
+                               "%s Max iteration time: %f min\n"
+                               "%s Total run time: %f hr\n",
+                       info, iter_time, info, max_iter_time, info, accum_time);
+            }
             ++iter;
         }
-
         return EXIT_SUCCESS;
     }
 }

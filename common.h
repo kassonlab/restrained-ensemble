@@ -96,5 +96,16 @@ struct input_filenames{
     std::string differences;
 };
 
+struct {
+    const char * HEADER = "\033[95m";
+    const char * OKBLUE {"\033[94m"};
+    const char * OKGREEN = "\033[92m";
+    const char * WARNING = "\033[93m";
+    const char * FAIL = "\033[91m";
+    const char * ENDC = "\033[0m";
+    const char * BOLD = "\033[1m";
+    const char * UNDERLINE = "\033[4m";
+} colors;
+
 typedef std::vector<pair_data> setofpairs;
 #endif //ROUX_COMMON_H

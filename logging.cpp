@@ -65,7 +65,7 @@ void Logging::write_header(std::ofstream &outfile) {
 
     char timebuf[BUFFER_LENGTH], timedata[BUFFER_LENGTH], inputdata[BUFFER_LENGTH], head[BUFFER_LENGTH];
 
-    std::strftime(timebuf, BUFFER_LENGTH, "# Log file opened on %D at %I:%M%p\n", timeinfo);
+    std::strftime(timebuf, BUFFER_LENGTH, "# Log file opened on %D at %I:%M%p\n#", timeinfo);
 
     std::string pair_string, k_string;
     for (auto &sd: vec_sd) {
@@ -73,7 +73,7 @@ void Logging::write_header(std::ofstream &outfile) {
         k_string += str(format("%f ") % sd.k);
     }
     snprintf(inputdata, BUFFER_LENGTH,
-             " Input parameters:\n@ experimental-filename:\t%s\n@ mdp:\t\t\t\t%s\n@ num-bins:"
+             "Input parameters:\n@ experimental-filename:\t%s\n@ mdp:\t\t\t\t%s\n@ num-bins:"
                      "\t\t\t%lu\n@ bin-width:\t\t\t%.2f\n@ sigma:\t\t\t%.2f\n@ boxcar-parts:\t\t\t%lu\n@ "
                      "pairs:\t\t\t%s\n@ k:\t\t\t\t%s\n@ out-filename:\t\t\t%s",
              input_names.exp_filename.c_str(),

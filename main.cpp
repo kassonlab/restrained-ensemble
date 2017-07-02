@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         desc.add_options()("help,h", "Help screen")
                 (
                         "time,t", value<double>()->default_value(1.0),
-                        "Maximum time to run the code (hours)"
+                        "Maximum time to run the code (mins)"
                 )
                 (
                         "config,f", value<std::string>()->default_value("roux.ini"),
@@ -87,6 +87,7 @@ int main(int argc, char **argv) {
 
     if (grompp) {
         ensemble.do_mdp(ensemble_number);
+        world.barrier();
         ensemble.do_grompp(ensemble_number);
         return EXIT_SUCCESS;
     } else {

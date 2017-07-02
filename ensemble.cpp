@@ -150,7 +150,7 @@ void Ensemble::do_mdp(int ensemble_number) {
 
     generate_ndx_files(input_names.gmx_exe, names, selection_filename, false);
 
-    make_mdp(vec_pd, input_names, params, pull_coord);
+    if (rank == 0) make_mdp(vec_pd, input_names, params, pull_coord);
 }
 
 void Ensemble::do_grompp(int ensemble_number) {

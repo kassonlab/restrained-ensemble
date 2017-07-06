@@ -115,11 +115,10 @@ int main(int argc, char **argv) {
 
             if (rank == root){
                 char info[50];
-                snprintf(info, 50, "%sINFO%s", colors.OKBLUE, colors.ENDC);
-                printf("%s Current iteration time: %f min\n"
+                printf("INFO: Current iteration time: %f min\n"
                                "%s Max iteration time: %f min\n"
                                "%s Total run time: %f hr\n",
-                       info, iter_time, info, max_iter_time, info, accum_time);
+                       iter_time, info, max_iter_time, info, accum_time);
             }
             ++iter;
         }

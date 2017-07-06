@@ -452,6 +452,13 @@ void make_mdp(std::vector<pair_data> vec_pd,
 
     FILE *rouxfile = fopen(input_files.roux_mdp.c_str(), "w");
 
+    if (!boost::filesystem::exists(input_files.mdp_template)){
+        char error[BUFFER_LENGTH];
+        snprintf(error, BUFFER_LENGTH,
+                 "The mdp template %s does not exist",
+        input_files.mdp_template.c_str());
+        throw std::invalid_argument(error);
+    }
     std::ifstream infile(input_files.mdp_template);
     std::string line;
     auto n_groups = pull_coord.size();

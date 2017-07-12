@@ -86,7 +86,7 @@ void read_exp_json(std::string exp_filename, std::vector<pair_data> &pd) {
     Json::Reader reader;
     bool parsingSuccessful = reader.parse(exp_stream, root);
     if (!parsingSuccessful) {
-        printf("Failed to parse config file\n%s",
+        printf("Failed to parse json file\n%s",
                reader.getFormattedErrorMessages().c_str());
     }
     for (auto &pair: pd) {
@@ -179,17 +179,17 @@ void vec2pd(simdata &sim_data, std::vector<pair_data> &vec_pd, bool skip_time) {
 
     // Now start storing data
     for (int i = 0; i < num_pairs; ++i) {
-        auto pd = &vec_pd[i];
+        auto &pd = vec_pd[i];
         std::vector<float> *sim_pd;
 
         if (skip_time) sim_pd = &sim_data[i];
         else {
-            pd->sim_time_data.insert(pd->sim_time_data.end(),
+            pd.sim_time_data.insert(pd.sim_time_data.end(),
                                      sim_data[0].begin(),
                                      sim_data[0].end());
             sim_pd = &sim_data[i + 1];
         }
-        pd->sim_dist_data.insert(pd->sim_dist_data.end(), sim_pd->begin(), sim_pd->end());
+        pd.sim_dist_data.insert(pd.sim_dist_data.end(), sim_pd->begin(), sim_pd->end());
 
     }
 

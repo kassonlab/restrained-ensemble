@@ -22,7 +22,7 @@ std::string strip_filename(std::string filename) {
     return stripped_filename;
 }
 
-template <typename T>
+template<typename T>
 std::vector<T> unique_elements(std::vector<T> vec) {
     std::sort(vec.begin(), vec.end());
     vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
@@ -65,7 +65,7 @@ int find_last_run_number(std::string ensemble_path,
     boost::regex reg{pattern};
     DIR *dir;
     struct dirent *ent;
-        if ((dir = opendir(directory_name)) != NULL) {
+    if ((dir = opendir(directory_name)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
             boost::cmatch cm;
             if (boost::regex_search(ent->d_name, cm, reg)) {
@@ -82,14 +82,14 @@ int find_last_run_number(std::string ensemble_path,
 gromacs_files generate_gromacs_filenames(int ensemble_number, prefixes prefs, int replica,
                                          bool start_tpr, bool protein_ndx) {
     gromacs_files names;
-    auto ensemble_path = prefs.ensemble_path;
-    auto directory_prefix = prefs.directory_prefix;
-    auto prod_prefix = prefs.prod_prefix;
-    auto start_prefix = prefs.start_prefix;
+    auto ensemble_path = prefs.ensemble_path.c_str();
+    auto directory_prefix = prefs.directory_prefix.c_str();
+    auto prod_prefix = prefs.prod_prefix.c_str();
+    auto start_prefix = prefs.start_prefix.c_str();
 
     if (ensemble_number > 1) {
-        names.xtc = str(format("%s/%s_%02i/%s.part%04i.xtc")
-                        % ensemble_path % directory_prefix % replica % prod_prefix % (ensemble_number - 1));
+        names.xtc = str(format("%s/%s_%02i/%s.part%04i.xtc") % ensemble_path % directory_prefix % replica % prod_prefix
+                        % (ensemble_number - 1));
         names.tpr = str(format("%s/%s_%02i/%s.tpr") % ensemble_path % directory_prefix % replica % prod_prefix);
         names.xvg = str(format("%s/%s_%02i/%s_pullx.part%04i.xvg")
                         % ensemble_path % directory_prefix % replica % prod_prefix % (ensemble_number - 1));
@@ -175,7 +175,7 @@ void make_xvg(std::string tpr_filename,
     std::vector<int> first, second;
 
     if (rewrite or !boost::filesystem::exists(xvg_filename)) {
-        for (auto& pair: pairs) {
+        for (auto &pair: pairs) {
             first.push_back(pair.first);
             second.push_back(pair.second);
         }
@@ -195,16 +195,33 @@ void make_xvg(std::string tpr_filename,
 
         }
 
-        for (uint i = 0; i < pairs.size(); i++) {
-            if (aa) {
-                selection += str(format("\"(%s%i) or (%s%i)\"") % str_1AA % first.at(i) % str_2AA % second.at(i));
+        auto num_pairs = pairs.size();
+        for (uint i = 0; i < num_pairs; i++) {
+            std::string pair_selection;
+            if (aa)
+                pair_selection = str(format("(%s%i) or (%s%i)")
+                                     % str_1AA.c_str() % first.at(i)
+                                     % str_2AA.c_str() % second.at(i));
+            else
+                pair_selection = str(format("(%s%i) or (%s%i)\"")
+                                     % str_1BB.c_str() % first.at(i)
+                                     % str_2BB.c_str() % second.at(i));
+
+            if (num_pairs == 1) {
+                selection += "\"" + pair_selection + "\"";
             } else {
-                selection += str(format("\"(%s%i) or (%s%i)\"") % str_1BB % first.at(i) % str_2BB % second.at(i));
+                if (i == 0)
+                    selection += "\"" + pair_selection;
+                if (i == num_pairs - 1)
+                    selection += " or " + pair_selection + "\"";
+                else
+                    selection += " or " + pair_selection;
             }
+
         }
 
         std::string command = str(format("%s distance -f %s -s %s -oall %s -select %s")
-                             % gmx_exe % xtc_filename % tpr_filename % xvg_filename % selection);
+                                  % gmx_exe % xtc_filename % tpr_filename % xvg_filename % selection);
         system(command.c_str());
     } else warn_file_exists(xvg_filename.c_str());
 }
@@ -270,7 +287,7 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
 
 
     if (boost::filesystem::exists(out_filename)) {
-        backup_file(out_filename, ensemble_number-1);
+        backup_file(out_filename, ensemble_number - 1);
     }
 
     std::ofstream hist_file;

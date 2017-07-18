@@ -197,7 +197,7 @@ void make_xvg(std::string tpr_filename,
 
         auto num_pairs = pairs.size();
         for (uint i = 0; i < num_pairs; i++) {
-            std::string pair_selection;
+            std::string pair_selection{""};
             if (aa)
                 pair_selection = str(format("(%s%i) or (%s%i)")
                                      % str_1AA.c_str() % first.at(i)
@@ -211,11 +211,12 @@ void make_xvg(std::string tpr_filename,
                 selection += "\"" + pair_selection + "\"";
             } else {
                 if (i == 0)
-                    selection += "\"" + pair_selection;
-                if (i == num_pairs - 1)
-                    selection += " or " + pair_selection + "\"";
-                else
-                    selection += " or " + pair_selection;
+                    selection += "\"" + pair_selection + ";";
+                else if (i == num_pairs - 1)
+                    selection += " " + pair_selection + "\"";
+                else {
+                    selection += " " + pair_selection + ";";
+                }
             }
 
         }
@@ -299,23 +300,25 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
     auto norm = 1.0 / sqrt(2.0 * M_PI * pow(params.sigma, 2.0));
 
     for (auto &pd: vec_pd) {
-        auto exp_data = &pd.exp_distribution;
-        if (exp_data->empty()) {
+        auto &exp_data = pd.exp_distribution;
+        if (exp_data.empty()) {
             char error[BUFFER_LENGTH];
             snprintf(error, BUFFER_LENGTH, "Cannot calculate histogram if experimental distribution is empty");
             throw std::invalid_argument(error);
         }
 
-        auto sim_data = &pd.sim_dist_data;
-        auto num_bins = exp_data->size();
-        auto num_samples = sim_data->size();
+        auto &sim_data = pd.sim_dist_data;
+        auto num_bins = exp_data.size();
+        auto num_samples = sim_data.size();
         auto sample_norm = (1.0 / num_samples) * norm;
 
         for (int n = 0; n < num_bins; ++n) {
             double h_ij_n{0};
-            for (auto &sample_dist: *sim_data) {
+            for (auto &sample_dist: sim_data) {
                 h_ij_n += sample_norm * exp(-pow(n * params.bin_width - sample_dist,
                                                  2.0) / (2 * pow(params.sigma, 2)));
+                if (h_ij_n < pow(10, -10))
+                    h_ij_n = 0;
             }
             if (n == 0) hist_file << h_ij_n;
             else hist_file << "," << h_ij_n;
@@ -347,7 +350,7 @@ std::vector<std::string> mdrun_chararray(parameters params, prefixes prefs, int 
 // MULTIDIR STRING
 
     for (auto i: params.replicas) {
-        argv.push_back(str(format("%s/%s_%02i/") % prefs.ensemble_path % prefs.directory_prefix % i));
+        argv.push_back(str(format("%s/%s_%02i/") % prefs.ensemble_path.c_str() % prefs.directory_prefix.c_str() % i));
     }
     argv.push_back("-noappend");
     argv.push_back("-pin");

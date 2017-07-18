@@ -8,6 +8,7 @@
 #include "rouxalgorithms.h"
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/tokenizer.hpp>
 
 namespace mpi = boost::mpi;
 
@@ -185,8 +186,8 @@ void vec2pd(simdata &sim_data, std::vector<pair_data> &vec_pd, bool skip_time) {
         if (skip_time) sim_pd = &sim_data[i];
         else {
             pd.sim_time_data.insert(pd.sim_time_data.end(),
-                                     sim_data[0].begin(),
-                                     sim_data[0].end());
+                                    sim_data[0].begin(),
+                                    sim_data[0].end());
             sim_pd = &sim_data[i + 1];
         }
         pd.sim_dist_data.insert(pd.sim_dist_data.end(), sim_pd->begin(), sim_pd->end());
@@ -211,20 +212,21 @@ void vec2sd(simdata &sim_data, std::vector<summary_data> &vec_sd, bool skip_time
 
     // Now start storing data
     for (int i = 0; i < num_pairs; ++i) {
-        auto pd = &vec_sd[i];
-        std::vector<float> *sim_sd;
+        auto &pd = vec_sd[i];
+        std::vector<float> sim_sd;
 
-        if (skip_time) sim_sd = &sim_data[i];
+        if (skip_time) sim_sd = sim_data[i];
         else {
-            pd->sim_time_data.insert(pd->sim_time_data.end(),
-                                     sim_data[0].begin(),
-                                     sim_data[0].end());
-            sim_sd = &sim_data[i + 1];
+            pd.sim_time_data.insert(pd.sim_time_data.end(),
+                                    sim_data[0].begin(),
+                                    sim_data[0].end());
+            sim_sd = sim_data[i + 1];
         }
+
         if (forces) {
-            pd->sim_forc_data.insert(pd->sim_forc_data.end(), sim_sd->begin(), sim_sd->end());
+            pd.sim_forc_data.insert(pd.sim_forc_data.end(), sim_sd.begin(), sim_sd.end());
         } else
-            pd->sim_dist_data.insert(pd->sim_dist_data.end(), sim_sd->begin(), sim_sd->end());
+            pd.sim_dist_data.insert(pd.sim_dist_data.end(), sim_sd.begin(), sim_sd.end());
     }
 
 }
@@ -283,6 +285,7 @@ void mpi_read_xvgs(boost::mpi::communicator &world,
             }
         }
     }
+//    std::cout << "Finished reading distance files" << std::endl;
     {
         scattered_files = scatter_files(forc_filenames, num_ranks);
         if (rank < scattered_files.size()) {
@@ -297,8 +300,13 @@ void mpi_read_xvgs(boost::mpi::communicator &world,
             }
         }
     }
+//    std::cout << "Finished reading force files " << rank << std::endl;
 
     mpi::broadcast(world, vec_sd, 0);
+//    std::cout << "Broadcast finished " << rank << std::endl;
+//    std::cout << vec_sd.size() << std::endl;
+//    std::cout << vec_sd[1].residue_ids.first << std::endl;
+//    std::cout << vec_sd[1].residue_ids.second << std::endl;
 }
 
 void generate_ndx_files(std::string gmx_exe,
@@ -452,11 +460,11 @@ void make_mdp(std::vector<pair_data> vec_pd,
 
     FILE *rouxfile = fopen(input_files.roux_mdp.c_str(), "w");
 
-    if (!boost::filesystem::exists(input_files.mdp_template)){
+    if (!boost::filesystem::exists(input_files.mdp_template)) {
         char error[BUFFER_LENGTH];
         snprintf(error, BUFFER_LENGTH,
                  "The mdp template %s does not exist",
-        input_files.mdp_template.c_str());
+                 input_files.mdp_template.c_str());
         throw std::invalid_argument(error);
     }
     std::ifstream infile(input_files.mdp_template);
@@ -483,20 +491,21 @@ void make_mdp(std::vector<pair_data> vec_pd,
     fclose(rouxfile);
 }
 
-void read_histograms(std::string dif_filename, std::vector<summary_data>& vec_sd) {
-
-    int pair_num{0};
-    std::ifstream infile(dif_filename);
+void read_histograms(std::string dif_filename, std::vector<summary_data> &vec_sd, int num_pairs) {
+    int pair{0};
     std::string line;
+    std::ifstream infile(dif_filename);
 
     std::getline(infile, line); // do once to handle bin width, sigma, min, max at top
+
     while (std::getline(infile, line)) {
-        auto tokens = strtok(const_cast<char *>(line.c_str()), ",");
-        while (tokens != NULL) {
-            vec_sd[pair_num].hist_difference.push_back(std::stod(tokens));
-            tokens = strtok(NULL, ",");
+        typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
+        boost::char_separator<char> sep{","};
+        tokenizer tok{line, sep};
+        for (const auto &t : tok) {
+            vec_sd[pair].hist_difference.push_back(std::stod(t));
         }
-        ++pair_num;
+        ++pair;
     }
     infile.close();
 }

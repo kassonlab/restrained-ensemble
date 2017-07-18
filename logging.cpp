@@ -32,27 +32,33 @@ void Logging::read_summary_data(int part) {
                                   % part));
     }
     mpi_read_xvgs(world, vec_sd, dist_files, force_files, params.num_pairs);
-    if (world.rank() == 0) read_histograms(hist_difs, vec_sd);
+    if (world.rank() == 0) {
+        read_histograms(hist_difs, vec_sd, params.num_pairs);
+    }
     mpi::broadcast(world, vec_sd, 0);
 }
 
 void Logging::calculate_forces() {
-    for (auto &sd: vec_sd) {
-        auto n_samples = sd.sim_dist_data.size();
-//        std::cout << n_samples << " rank " << world.rank() << std::endl;
-        sd.calc_forc_data.resize(n_samples);
-        double force, x, exponential;
-        auto norm = sd.k / (pow(params.sigma, 3) * sqrt(2 * M_PI));
+    auto rank = world.rank();
+    if (rank >= params.num_pairs) {
+        return;
+    }
 
-        for (int sample = 0; sample < n_samples; ++sample) {
-            force = 0;
-            for (int bin_num = 0; bin_num < params.num_bins; ++bin_num) {
-                x = bin_num * params.bin_width - sd.sim_dist_data[sample];
-                exponential = exp(-pow(x, 2) / (2 * pow(params.sigma, 2)));
-                force -= sd.hist_difference[bin_num] * x * exponential;
-            }
-            sd.calc_forc_data[sample] = (float) (norm * force);
+    auto &sd = vec_sd.at(rank);
+    auto n_samples = sd.sim_dist_data.size();
+    sd.calc_forc_data.resize(n_samples);
+
+    double force, x, exponential;
+    auto norm = sd.k / (pow(params.sigma, 3) * sqrt(2 * M_PI));
+
+    for (int sample = 0; sample < n_samples; ++sample) {
+        force = 0;
+        for (int bin_num = 0; bin_num < params.num_bins; ++bin_num) {
+            x = bin_num * params.bin_width - sd.sim_dist_data[sample];
+            exponential = exp(-pow(x, 2) / (2 * pow(params.sigma, 2)));
+            force -= sd.hist_difference[bin_num] * x * exponential;
         }
+        sd.calc_forc_data[sample] = (float) (norm * force);
     }
 }
 
@@ -68,7 +74,7 @@ void Logging::write_header(std::ofstream &outfile) {
     std::strftime(timebuf, BUFFER_LENGTH, "# Log file opened on %D at %I:%M%p\n#", timeinfo);
 
     std::string pair_string, k_string;
-    for (auto &sd: vec_sd) {
+    for (auto sd: vec_sd) {
         pair_string += str(format("%03i %03i ") % sd.residue_ids.first % sd.residue_ids.second);
         k_string += str(format("%f ") % sd.k);
     }
@@ -85,7 +91,6 @@ void Logging::write_header(std::ofstream &outfile) {
              pair_string.c_str(),
              k_string.c_str(),
              input_names.differences.c_str());
-
     snprintf(head, BUFFER_LENGTH, "\n#\n@ Time\t(X) %s\t(F) %s\t(CF) %s\n",
              pair_string.c_str(), pair_string.c_str(), pair_string.c_str());
 
@@ -97,14 +102,15 @@ void Logging::write_summary(int part, bool check_forces) {
     int rank = world.rank();
 
     read_summary_data(part);
-    auto num_samples = vec_sd[0].sim_time_data.size();
-
-    if (check_forces && rank == 0) {
+    if (check_forces) {
         calculate_forces();
+        world.barrier();
     }
 
+    world.barrier();
     if (rank < params.num_pairs) {
         auto sd = vec_sd[rank];
+        auto num_samples = vec_sd[0].sim_time_data.size();
         char buffer[BUFFER_LENGTH];
         std::snprintf(buffer, BUFFER_LENGTH, "%s/pair%03i_%03i.part%04i.txt",
                       input_names.log_dir.c_str(),
@@ -115,12 +121,11 @@ void Logging::write_summary(int part, bool check_forces) {
         std::ofstream summary_file(sd.summary_filename);
         write_header(summary_file);
         for (int i = 0; i < num_samples; ++i) {
-            summary_file.precision(4);
+            summary_file.precision(6);
             summary_file << sd.sim_time_data[i] << "\t";
             summary_file.precision(6);
             summary_file << sd.sim_dist_data[i] << "\t";
             summary_file << sd.sim_forc_data[i] << "\t";
-
             if (check_forces) {
                 summary_file << sd.calc_forc_data[i] << "\t";
             }

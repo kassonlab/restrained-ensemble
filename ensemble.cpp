@@ -22,12 +22,12 @@ void Ensemble::link_to_logging(Logging &logger) {
     logger.world = world;
     logger.vec_sd.resize(params.num_pairs);
     for (int i = 0; i < logger.vec_sd.size(); ++i) {
-        auto& logger_vec_sd = logger.vec_sd[i];
-        auto& ensemb_vec_pd = vec_pd[i];
+        auto &logger_vec_sd = logger.vec_sd[i];
+        auto &ensemb_vec_pd = vec_pd[i];
         logger_vec_sd.residue_ids = ensemb_vec_pd.residue_ids;
         logger_vec_sd.k = ensemb_vec_pd.k;
         logger_vec_sd.exp_distribution = ensemb_vec_pd.exp_distribution;
-        logger_vec_sd.hist_difference.resize(ensemb_vec_pd.exp_distribution.size());
+//        logger_vec_sd.hist_difference.resize(ensemb_vec_pd.exp_distribution.size());
     }
 }
 
@@ -46,7 +46,6 @@ int Ensemble::setup_restart(Logging &logger, bool check_forces) {
     ensemble_number = find_last_run_number(prefs.ensemble_path,
                                            prefs.directory_prefix,
                                            params.replicas[0]);
-
 
     if (ensemble_number > 1) {
         if (rank < params.num_replicas) {
@@ -72,7 +71,9 @@ int Ensemble::setup_restart(Logging &logger, bool check_forces) {
                      ensemble_number - 1);
             if (!boost::filesystem::exists(buffer)) summaries_exist = false;
         }
-        if (!summaries_exist) logger.write_summary(ensemble_number - 1, check_forces);
+        if (!summaries_exist) {
+            logger.write_summary(ensemble_number - 1, check_forces);
+        }
 
     } else {
         auto names = generate_gromacs_filenames(ensemble_number, prefs,
@@ -188,8 +189,6 @@ void Ensemble::do_mdrun() {
         v[i] = argv_string[i].c_str();
     }
     v.push_back(NULL);
-
     argv = &v[0];
-
     gmx_mdrun(argc, const_cast<char **>(argv));
 }

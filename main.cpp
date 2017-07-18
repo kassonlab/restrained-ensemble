@@ -78,9 +78,10 @@ int main(int argc, char **argv) {
     ensemble.input_names.differences = getenv("HISTDIF");
     read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
 
-    ensemble.link_to_logging(logger);
-    ensemble_number = ensemble.setup_restart(logger, check_forces);
 
+    ensemble.link_to_logging(logger);
+
+    ensemble_number = ensemble.setup_restart(logger, check_forces);
     mpi::broadcast(world, ensemble_number, root);
 
     ensemble.do_histogram(ensemble_number);
@@ -102,8 +103,11 @@ int main(int argc, char **argv) {
             start = std::chrono::system_clock::now();
 
             ensemble.do_mdrun();
+            world.barrier();
             ensemble.do_histogram(ensemble_number + 1);
+            world.barrier();
             logger.write_summary(ensemble_number, check_forces);
+            world.barrier();
             ++ensemble_number;
 
             end = std::chrono::system_clock::now();
@@ -113,12 +117,11 @@ int main(int argc, char **argv) {
             max_iter_time = std::max(iter_time, max_iter_time);
             accum_time += max_iter_time;
 
-            if (rank == root){
-                char info[50];
+            if (rank == root) {
                 printf("INFO: Current iteration time: %f min\n"
-                               "%s Max iteration time: %f min\n"
-                               "%s Total run time: %f hr\n",
-                       iter_time, info, max_iter_time, info, accum_time);
+                               "INFO: Max iteration time: %f min\n"
+                               "INFO: Total run time: %f hr\n",
+                       iter_time, max_iter_time, accum_time);
             }
             ++iter;
         }

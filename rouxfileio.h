@@ -46,5 +46,5 @@ void make_mdp(std::vector<pair_data> vec_pd,
               parameters params,
               vecofstrings pull_coord);
 
-void read_histograms(std::string dif_filename, std::vector<summary_data>& vec_sd);
+void read_histograms(std::string dif_filename, std::vector<summary_data>& vec_sd, int num_pairs);
 #endif //ROUX_ROUXFILEIO_H

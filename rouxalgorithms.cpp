@@ -313,15 +313,15 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
         auto sample_norm = (1.0 / num_samples) * norm;
 
         for (int n = 0; n < num_bins; ++n) {
-            double h_ij_n{0};
+            double h_ij_n{0}, dif_ij_n{0};
             for (auto &sample_dist: sim_data) {
                 h_ij_n += sample_norm * exp(-pow(n * params.bin_width - sample_dist,
                                                  2.0) / (2 * pow(params.sigma, 2)));
-                if (h_ij_n < pow(10, -10))
-                    h_ij_n = 0;
             }
-            if (n == 0) hist_file << h_ij_n;
-            else hist_file << "," << h_ij_n;
+            dif_ij_n = h_ij_n - exp_data.at(n);
+
+            if (n == 0) hist_file << dif_ij_n;
+            else hist_file << "," << dif_ij_n;
         }
         hist_file << "\n";
     }

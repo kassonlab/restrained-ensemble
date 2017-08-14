@@ -315,8 +315,8 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
         for (int n = 0; n < num_bins; ++n) {
             double h_ij_n{0}, dif_ij_n{0};
             for (auto &sample_dist: sim_data) {
-                auto x = n * params.bin_width - sample_dist;
-                h_ij_n += sample_norm * x *exp(-pow(x, 2.0) / (2 * pow(params.sigma, 2)));
+                h_ij_n += sample_norm * exp(-pow(n * params.bin_width - sample_dist,
+                                                 2.0) / (2 * pow(params.sigma, 2)));
             }
             dif_ij_n = h_ij_n - exp_data.at(n);
 

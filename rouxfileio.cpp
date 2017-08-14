@@ -78,14 +78,6 @@ void parse_ini(const char *ini_filename,
     pars.aa = (pt.get<std::string>("parameters.aa") == "yes");
     pars.chains = pt.get<int>("parameters.chains");
     pars.num_replicas = pars.replicas.size();
-
-    if (k.size() != pars.num_pairs){
-        char error[BUFFER_LENGTH];
-        sprintf(error,
-                "The number of spring constants (%lu) does not equal the number of pairs (%lu)",
-                k.size(), pars.num_pairs);
-        throw std::invalid_argument(error);
-    }
 }
 
 void read_exp_json(std::string exp_filename, std::vector<pair_data> &pd) {

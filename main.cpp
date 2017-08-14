@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     mpi::environment env(argc, argv);
     mpi::communicator world;
     int rank = world.rank();
-    int root{0}, ensemble_number{0}, num_iters{1000};
+    int root{0}, ensemble_number{0};
     std::string config_filename;
     double max_time_double{1.0};
     bool grompp{false}, check_forces{false};
@@ -40,10 +40,6 @@ int main(int argc, char **argv) {
                 )
                 (
                         "checkf,c", "Check forces?"
-                )
-                (
-                        "numiters,n", value<int>()->default_value(1000),
-                        "Number of total parts to simulate"
                 );
 
         variables_map vm;
@@ -66,14 +62,12 @@ int main(int argc, char **argv) {
         grompp = (bool) vm.count("grompp");
         check_forces = (bool) vm.count("checkf");
 
-        num_iters = vm.count("numiters") ? vm["numiters"].as<int>() : 1000;
         max_time_double = vm.count("time") ? vm["time"].as<double>() : 1.0;
     }
 
     mpi::broadcast(world, config_filename, root);
     mpi::broadcast(world, grompp, root);
     mpi::broadcast(world, check_forces, root);
-    mpi::broadcast(world, num_iters, root);
     mpi::broadcast(world, max_time_double, root);
 
     std::chrono::duration<double, std::ratio<60>> max_time(max_time_double);
@@ -82,10 +76,6 @@ int main(int argc, char **argv) {
     Logging logger;
 
     ensemble.input_names.differences = getenv("HISTDIF");
-    if (ensemble.input_names.differences.c_str() == NULL){
-        char error[BUFFER_LENGTH] = "The environment variable HISTDIF is empty";
-        throw std::invalid_argument(error);
-    }
     read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
 
 
@@ -108,7 +98,7 @@ int main(int argc, char **argv) {
         std::chrono::duration<double, std::ratio<3600>> accum_time;
 
         int iter{1};
-        while ((accum_time + max_iter_time) < max_time || ensemble_number < num_iters) {
+        while ((accum_time + max_iter_time) < max_time) {
 
             start = std::chrono::system_clock::now();
 

@@ -318,7 +318,7 @@ void calculate_histogram(std::vector<pair_data> vec_pd,
                 h_ij_n += sample_norm * exp(-pow(n * params.bin_width - sample_dist,
                                                  2.0) / (2 * pow(params.sigma, 2)));
             }
-            dif_ij_n = exp_data.at(n) - h_ij_n;
+            dif_ij_n = h_ij_n - exp_data.at(n);
 
             if (n == 0) hist_file << dif_ij_n;
             else hist_file << "," << dif_ij_n;

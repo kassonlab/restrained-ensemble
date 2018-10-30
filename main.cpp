@@ -70,11 +70,12 @@ int main(int argc, char **argv) {
     mpi::broadcast(world, check_forces, root);
     mpi::broadcast(world, max_time_double, root);
 
+    //printf("Thread %i got the config file %s\n", rank, config_filename.c_str());
     std::chrono::duration<double, std::ratio<60>> max_time(max_time_double);
 
     Ensemble ensemble(config_filename.c_str(), world);
     Logging logger;
-
+    printf("Thread %i connected the logger", rank);
     ensemble.input_names.differences = getenv("HISTDIF");
     read_exp_json(ensemble.input_names.exp_filename, ensemble.vec_pd);
 
